@@ -1,0 +1,46 @@
+# This is a simplified example for learning purposes. Do not use this in production.
+
+services:
+    sglang:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        container_name: mistral-sglang
+        volumes:
+            - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+            # If you use modelscope, you need mount this directory
+            # - ${HOME}/.cache/modelscope:/root/.cache/modelscope
+        restart: always
+        network_mode: host # required by RDMA
+        privileged: true # required by RDMA
+        # Or you can only publish port 30000
+        # ports:
+        #   - ${SGLANG_PORT:-30000}:${SGLANG_PORT:-30000}
+        environment:
+            HF_TOKEN: ${HF_TOKEN:?Environment variable HF_TOKEN must be set.}
+            # if you use modelscope to download model, you need set this environment
+            # - SGLANG_USE_MODELSCOPE: true
+        entrypoint: python3 -m sglang.launch_server
+        command:
+            --model-path OPEA/Mistral-Small-3.1-24B-Instruct-2503-int4-AutoRound-awq-sym
+            --tool-call-parser mistral
+            --context-length 32768
+            --host 0.0.0.0
+            --port ${SGLANG_PORT:-30000}
+        ulimits:
+            memlock: -1
+            stack: 67108864
+        ipc: host
+        healthcheck:
+            test:
+                [
+                    "CMD-SHELL",
+                    "curl -f http://localhost:${SGLANG_PORT:-30000}/health || exit 1",
+                ]
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          device_ids: ["0"]
+                          capabilities: [gpu]
